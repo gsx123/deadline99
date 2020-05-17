@@ -57,6 +57,7 @@ class Card {
     async execute(player) {
 
         Card.GameCtrl.eventEmitter.emit('judge', player);
+
     }
 }
 class CardScore extends Card {
@@ -173,11 +174,16 @@ function createCard(val) {
 class Score {
     constructor() {
         this.score = 0;
+        this.scoreBackup = 0;
     }
     get() { return this.score; }
-    set(s) { this.score = s; }
+    set(s) { this.scoreBackup = this.score; this.score = s; }
     add(plusValue) {
+        this.scoreBackup = this.score;
         this.score += plusValue;
+    }
+    restore() {
+        this.score = this.scoreBackup;
     }
 }
 
@@ -197,6 +203,7 @@ class GameCtrl {
         this.players = [];
         this.cardStock = [];
         this.cardPlayed = [];
+        this.cardRecyle = [];
         this.myPlayer = null;
         this.tickCnt = 0;
         this.state = State.init;
@@ -211,15 +218,39 @@ class GameCtrl {
     }
     initGame() {
 
-        this.eventEmitter.on('judge', async () => {
+        this.eventEmitter.on('judge', async (player) => {
             console.log('onEvent judge');
 
+            let lose = false;
+            if (player.handCards.length == 0) {
+                lose = true;
+            }
+            if (this.score.get() > C.DeadlineScore) {
+                lose = true;
+                this.score.restore();
+            }
+            if (lose) {
+                player.setAlive(false);
+            }
+
+            let aliveCnt = this.myPlayer.isAlive() ? 1 : 0;
+            let alivePlayer = aliveCnt == 1 ? this.myPlayer : null;
+            for (const p of this.players) {
+                aliveCnt += p.isAlive() ? 1 : 0;
+                if (!alivePlayer) alivePlayer = p.isAlive() ? p : null;
+            }
+            if (aliveCnt == 1) {
+                console.log('GameOver only one alive');
+                this.onEndARound(alivePlayer);
+            } else {
+                this.eventEmitter.emit('nextPlayer');
+            }
 
         })
         this.eventEmitter.on('nextPlayer', async () => {
             console.log('onEvent nextPlayer');
             let np = this.getNextPlayer();
-            await sleep(5000);
+            await sleep(4000);
             if (this.isMyPlayer(np)) {
 
                 return;
@@ -244,6 +275,7 @@ class GameCtrl {
             this.cardStock.push(createCard(item));
         }
     }
+
     initPlayers(rivalNumber) {
         this.myPlayer = new Player('Me', 0);
         for (var i = 0; i < rivalNumber; ++i) {
@@ -252,9 +284,34 @@ class GameCtrl {
 
     }
 
+    onEndARound(winner) {
+        window.alert('Winer is ' + winner.getName());
+
+        this.reloadARound();
+    }
+    resetPlayer(player) {
+        this.cardRecyle.contat(player.handCards);
+        player.handCards = []; player.setAlive(true);
+    }
+
+    reloadARound() {
+        console.warn('==== reloadARound');
+        this.cardRecyle = this.cardPlayed;
+        this.cardPlayed = [];
+        this.myPlayer.setAlive(true);
+        this.resetPlayer(this.myPlayer);
+        this.players.forEach((e) => {
+            this.resetPlayer(e);
+        });
+    }
     _pickCard() {
         let n = Math.floor(Math.random() * this.cardStock.length);
         let card = this.cardStock.splice(n, 1)[0];
+        if (this.cardStock.length == 0) {
+            console.info('No card in stock ,reload ');
+            this.cardStock = this.cardRecyle;
+            this.cardRecyle = [];
+        }
         return card;
     }
 
@@ -273,21 +330,34 @@ class GameCtrl {
         if (this.specifiedNextPlayerId >= 0) {
             this.curPlayerId = this.specifiedNextPlayerId;
             this.specifiedNextPlayerId = -1;
-        } else {
+            if (this.curPlayerId == 0) {
+                return this.myPlayer;
+            }
+            return this.players[this.curPlayerId - 1];
+        }
+        do {
             this.playOrderClockwise ? this.curPlayerId++ : this.curPlayerId--;
+            if (this.curPlayerId > this.players.length) {
+                this.curPlayerId = 0;
+            }
+            if (this.curPlayerId < 0) {
+                this.curPlayerId = this.players.length;
+            }
+            console.log(`getNextPlayer id:${this.curPlayerId}`);
+            if (this.curPlayerId == 0) {
+                if (!this.myPlayer.isAlive()) {
+                    continue;
+                }
+                return this.myPlayer;
+            }
+            let testPlayer = this.players[this.curPlayerId - 1];
+            if (!testPlayer.isAlive()) {
+                console.log(`getNextPlayer player:${testPlayer.getName()} dead`);
+                continue;
+            }
+            return testPlayer;
+        } while (false);
 
-        }
-        if (this.curPlayerId > this.players.length) {
-            this.curPlayerId = 0;
-        }
-        if (this.curPlayerId < 0) {
-            this.curPlayerId = this.players.length;
-        }
-        console.log(`getNextPlayer id:${this.curPlayerId}`);
-        if (this.curPlayerId == 0) {
-            return this.myPlayer;
-        }
-        return this.players[this.curPlayerId - 1];
     }
     reversePlayOrder() {
         this.playOrderClockwise = !this.playOrderClockwise;
@@ -342,12 +412,13 @@ class GameCtrl {
     }
     async askToSelectTargetPlayer(player) {
         if (!this.isMyPlayer(player)) {
-            let id = Math.ceil(Math.random() * this.rivalNumber);
-            if (id == player.getId()) {
-                this.targetPlayer = this.myPlayer;
-            } else {
-                this.targetPlayer = this.players[id - 1];
+            let arr = [];
+            for (const item of this.players) {
+                if (item.isAlive()) arr.push(item);
             }
+            arr.push(this.myPlayer);
+            let id = Math.ceil(Math.random() * arr.length);
+            this.targetPlayer = arr[id];
             console.log(`askToSelectTargetPlayer[auto] selected:${this.targetPlayer.getName()}`)
             return this.targetPlayer;
         }
@@ -382,12 +453,18 @@ class GameCtrl {
         return '<button class=player onclick="playCard(' + c.id + ')">' + c.getName() + '</button>';
     }
     renderPlayer(p, curPlayerId) {
+        if (!p.isAlive()) {
+            return '<s>Player ' + p.getName() + '</s>';
+        }
         let color = curPlayerId == p.id ? 'red' : 'black';
         return '<button style="color:' + color + '" onclick="selectPlayer(\'' + p.getName() + '\')">Player ' + p.getName() + '</button> : ' + p.handCards.map((c) => {
             return '*';
         }).join(' ') + '<br/>';
     }
     renderMyPlayer(p, curPlayerId) {
+        if (!p.isAlive()) {
+            return '<s>Me</s>';
+        }
         let color = curPlayerId == p.id ? 'red' : 'black';
         return '<span style="color:' + color + '">Me</span>    : ' + p.handCards.map((c) => {
             return this.renderCardClickable(c);
@@ -457,6 +534,7 @@ class Player {
         this.handCards = [];
         this.name = name;
         this.id = id;
+        this.alive = true;
     }
     getId() { return this.id; }
     getName() {
@@ -484,6 +562,10 @@ class Player {
         let card = this.handCards.splice(n, 1)[0];
         return card;
     }
+    setAlive(alive) {
+        this.alive = alive;
+    }
+    isAlive() { return this.alive; }
 }
 
 var gt = new GameCtrl();
