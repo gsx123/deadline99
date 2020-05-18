@@ -511,7 +511,7 @@ class GameCtrl {
     }
     renderCardStock() {
         let imgs = this.cardStock.map((c) => { return c.image });
-        return '<div>' + this.renderPiledCards(imgs) + '</div>';
+        return '' + this.renderPiledCards(imgs) + '';
         // return '<div>' + this.renderCoveredCard().repeat(this.cardStock.length) + '</div>';
     }
     renderCardPlayed() {
@@ -533,17 +533,27 @@ class GameCtrl {
 
         let tmpMy = this.renderMyPlayer(this.myPlayer, this.curPlayerId);
 
-        let html = '';
-
         let htmlTick = tmpTick.replace('$tick$', this.tickCnt);
-        html = htmlTick;
+
+        let html = '';
+        html += '<div id=tick>';
+        html += htmlTick;
+        html += '</div>';
+        html += '<div id=score>';
         html += tmpScore.replace('$score$', this.score.get());
+        html += '</div>';
         html += '<hr/>';
+        html += '<div id=stock style="position: absolute;top:140px;left:0px;width:1000px;height:120px">';
         html += this.renderCardStock();
+        html += '</div>';
         html += '<hr/>';
+        html += '<div id=played>';
         html += this.renderCardPlayed();
+        html += '</div>';
         html += '<hr/>';
+        html += '<div id=players>';
         html += tmpPlayersHtml;
+        html += '</div>';
         html += '<hr/>';
         html += tmpMy;
 
