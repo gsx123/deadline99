@@ -46,9 +46,12 @@ let C = {
 class Card {
     static CardID = 0;
     static GameCtrl = null;
-    constructor(val) {
+    static imageCovered = 'assets/image/poker/covered.jpg';
+    constructor(val, decor) {
         this.value = val;
         this.id = Card.CardID++;
+        this.picking = false;
+        this.image = 'assets/image/poker/' + val.toString() + (decor == 1 ? '' : ' (' + decor.toString() + ')') + '.jpg';
     }
 
     getName() {
@@ -61,8 +64,8 @@ class Card {
     }
 }
 class CardScore extends Card {
-    constructor(val) {
-        super(val);
+    constructor(val, decor) {
+        super(val, decor);
     }
 
     async execute(player) {
@@ -72,8 +75,8 @@ class CardScore extends Card {
     }
 }
 class CardPlusMinus extends Card {
-    constructor(val, scoreVal) {
-        super(val);
+    constructor(val, decor, scoreVal) {
+        super(val, decor);
         this.scoreVal = scoreVal;
     }
     async execute(player) {
@@ -84,20 +87,22 @@ class CardPlusMinus extends Card {
     }
 }
 class CardSteal extends Card {
-    constructor(val) {
-        super(val);
+    constructor(val, decor) {
+        super(val, decor);
     }
     async execute(player) {
         let targetPlayer = await Card.GameCtrl.askToSelectTargetPlayer(player);
-        let card = targetPlayer.pickCard();
+        let { card, id } = targetPlayer.pickingCard();
+        Card.GameCtrl.tick();
+        await sleep(1000);
         player.takeIn(card);
         // Card.GameCtrl.getCardToPlayer(player);
         super.execute(player);
     }
 }
 class CardReverse extends Card {
-    constructor(val) {
-        super(val);
+    constructor(val, decor) {
+        super(val, decor);
     }
     async execute(player) {
 
@@ -107,8 +112,8 @@ class CardReverse extends Card {
     }
 }
 class CardExchange extends Card {
-    constructor(val) {
-        super(val);
+    constructor(val, decor) {
+        super(val, decor);
     }
     async execute(player) {
         let targetPlayer = await Card.GameCtrl.askToSelectTargetPlayer(player);
@@ -120,8 +125,8 @@ class CardExchange extends Card {
     }
 }
 class CardScoreToTop extends Card {
-    constructor(val) {
-        super(val);
+    constructor(val, decor) {
+        super(val, decor);
     }
     async execute(player) {
         Card.GameCtrl.score.set(C.DeadlineScore);
@@ -130,8 +135,8 @@ class CardScoreToTop extends Card {
     }
 }
 class CardPickNext extends Card {
-    constructor(val) {
-        super(val);
+    constructor(val, decor) {
+        super(val, decor);
     }
     async execute(player) {
         let targetPlayer = await Card.GameCtrl.askToSelectTargetPlayer(player);
@@ -143,28 +148,28 @@ class CardPickNext extends Card {
 
 
 
-function createCard(val) {
+function createCard(val, decor) {
     switch (val.toString()) {
-        case '1':
-            return new CardPickNext(val);
+        case 'A':
+            return new CardPickNext(val, decor);
         case '3':
         case '4':
         case '5':
         case '6':
         case '9':
-            return new CardScore(val);
+            return new CardScore(val, decor);
         case '10':
-            return new CardPlusMinus(val, 10);
-        case 'q':
-            return new CardPlusMinus(val, 20);
-        case 'j':
-            return new CardSteal((val));
-        case 'k':
-            return new CardScoreToTop((val));
+            return new CardPlusMinus(val, decor, 10);
+        case 'Q':
+            return new CardPlusMinus(val, decor, 20);
+        case 'J':
+            return new CardSteal(val, decor);
+        case 'K':
+            return new CardScoreToTop(val, decor);
         case '8':
-            return new CardReverse((val));
+            return new CardReverse(val, decor);
         case '7':
-            return new CardExchange((val));
+            return new CardExchange(val, decor);
 
         default:
             break;
@@ -250,29 +255,29 @@ class GameCtrl {
         this.eventEmitter.on('nextPlayer', async () => {
             console.log('onEvent nextPlayer');
             let np = this.getNextPlayer();
-            await sleep(4000);
+            await sleep(1000);
             if (this.isMyPlayer(np)) {
 
                 return;
             }
-            let card = np.pickCard();
-            this.playCard(np, card);
+            // let card = np.pickCard();
+            // this.playCard(np, card);
+            await this.pickingPlayCard(np);
         })
 
         this.state = State.init;
-        for (var i = 1; i <= 10; ++i) {
-            if (i == 2) continue;
-            this.cardStock.push(createCard(i));
-            this.cardStock.push(createCard(i));
-            this.cardStock.push(createCard(i));
-            this.cardStock.push(createCard(i));
+        for (var i = 3; i <= 10; ++i) {
+            this.cardStock.push(createCard(i, 1));
+            this.cardStock.push(createCard(i, 2));
+            this.cardStock.push(createCard(i, 3));
+            this.cardStock.push(createCard(i, 4));
         }
-        var arr = ['j', 'q', 'k'];
+        var arr = ['A', 'J', 'Q', 'K'];
         for (const item of arr) {
-            this.cardStock.push(createCard(item));
-            this.cardStock.push(createCard(item));
-            this.cardStock.push(createCard(item));
-            this.cardStock.push(createCard(item));
+            this.cardStock.push(createCard(item, 1));
+            this.cardStock.push(createCard(item, 2));
+            this.cardStock.push(createCard(item, 3));
+            this.cardStock.push(createCard(item, 4));
         }
     }
 
@@ -305,13 +310,14 @@ class GameCtrl {
         });
     }
     _pickCard() {
-        let n = Math.floor(Math.random() * this.cardStock.length);
-        let card = this.cardStock.splice(n, 1)[0];
         if (this.cardStock.length == 0) {
             console.info('No card in stock ,reload ');
             this.cardStock = this.cardRecyle;
             this.cardRecyle = [];
         }
+        let n = Math.floor(Math.random() * this.cardStock.length);
+        let card = this.cardStock.splice(n, 1)[0];
+
         return card;
     }
 
@@ -346,8 +352,10 @@ class GameCtrl {
             console.log(`getNextPlayer id:${this.curPlayerId}`);
             if (this.curPlayerId == 0) {
                 if (!this.myPlayer.isAlive()) {
+                    console.error('Me dead');
                     continue;
                 }
+                this.tick();
                 return this.myPlayer;
             }
             let testPlayer = this.players[this.curPlayerId - 1];
@@ -356,7 +364,7 @@ class GameCtrl {
                 continue;
             }
             return testPlayer;
-        } while (false);
+        } while (true);
 
     }
     reversePlayOrder() {
@@ -391,6 +399,7 @@ class GameCtrl {
 
                 this.players[j].takeIn(b);
             }
+            this.tick();
         }
     }
     async initRound() {
@@ -414,10 +423,10 @@ class GameCtrl {
         if (!this.isMyPlayer(player)) {
             let arr = [];
             for (const item of this.players) {
-                if (item.isAlive()) arr.push(item);
+                if (item.isAlive() && player.getId() != item.getId()) arr.push(item);
             }
             arr.push(this.myPlayer);
-            let id = Math.ceil(Math.random() * arr.length);
+            let id = Math.floor(Math.random() * arr.length);
             this.targetPlayer = arr[id];
             console.log(`askToSelectTargetPlayer[auto] selected:${this.targetPlayer.getName()}`)
             return this.targetPlayer;
@@ -437,20 +446,50 @@ class GameCtrl {
         return this.targetPlayer;
     }
 
+    async pickingPlayCard(player) {
+        let picking = player.pickingCard();
+        this.tick();
+        await sleep(2000);
+        player.pickCardOut(picking.id);
+        this.playCard(player, picking.card);
+
+        this.tick();
+    }
     playCard(player, card) {
         if (card) {
             console.warn(`[playCard] "${player.getName()}" played ${card.getName()}`);
-            gt.recvPlayedCard(card);
+            this.recvPlayedCard(card);
             card.execute(player);
+            this.tick();
         }
-        gt.tick();
+        // gt.tick();
     }
 
+    renderGetPos(xpos) {
+        let css = 'position: absolute;left: ' + xpos + 'px;top: 2px';
+        return css;
+    }
+
+    renderPiledCards(images) {
+        let html = '';
+        let gap = 20;
+        for (let index = 0; index < images.length; index++) {
+            const img = images[index];
+            let xpos = index * gap;
+            html += '<img style="' + this.renderGetPos(xpos) + '" src="' + img + '"/>';
+        }
+        return html;
+    }
+
+    renderCoveredCard() {
+        return '<img src="' + Card.imageCovered + '"/>';
+    }
     renderCard(c) {
-        return c.getName();
+        return '<img src="' + c.image + '"/>';
+        // return c.getName();
     }
     renderCardClickable(c) {
-        return '<button class=player onclick="playCard(' + c.id + ')">' + c.getName() + '</button>';
+        return '<button class=player onclick="playCard(' + c.id + ')">' + this.renderCard(c) + '</button>';
     }
     renderPlayer(p, curPlayerId) {
         if (!p.isAlive()) {
@@ -458,7 +497,7 @@ class GameCtrl {
         }
         let color = curPlayerId == p.id ? 'red' : 'black';
         return '<button style="color:' + color + '" onclick="selectPlayer(\'' + p.getName() + '\')">Player ' + p.getName() + '</button> : ' + p.handCards.map((c) => {
-            return '*';
+            return c.picking ? this.renderCard(c) : this.renderCoveredCard();
         }).join(' ') + '<br/>';
     }
     renderMyPlayer(p, curPlayerId) {
@@ -471,7 +510,9 @@ class GameCtrl {
         }).join(' ') + '<br/>';
     }
     renderCardStock() {
-        return '*'.repeat(this.cardStock.length);
+        let imgs = this.cardStock.map((c) => { return c.image });
+        return '<div>' + this.renderPiledCards(imgs) + '</div>';
+        // return '<div>' + this.renderCoveredCard().repeat(this.cardStock.length) + '</div>';
     }
     renderCardPlayed() {
         return 'Played    : ' + this.cardPlayed.map((c) => {
@@ -522,7 +563,7 @@ class GameCtrl {
         this.renderDomId = eleId;
         let the = this;
         setInterval(() => {
-            the.tick(eleId);
+            // the.tick(eleId);
         }, 1000);
 
     }
@@ -541,6 +582,7 @@ class Player {
         return this.name;
     }
     takeIn(card) {
+        card.picking = false;
         this.handCards.push(card);
     }
     moveCardOut(card) {
@@ -557,9 +599,15 @@ class Player {
         }
         return card;
     }
-    pickCard() {
-        let n = Math.random(this.handCards.length - 1);
+    pickingCard() {
+        let n = Math.floor(Math.random() * this.handCards.length);
+        let toPickCard = this.handCards[n];
+        toPickCard.picking = true;
+        return { card: toPickCard, id: n };
+    }
+    pickCardOut(n) {
         let card = this.handCards.splice(n, 1)[0];
+        card.picking = false;
         return card;
     }
     setAlive(alive) {
