@@ -73,6 +73,15 @@ class CardScore extends Card {
         Card.GameCtrl.getCardToPlayer(player);
         super.execute(player);
     }
+    executeTest(player) {
+        Card.GameCtrl.score.add(parseInt(this.value));
+        let fail = false;
+        if (Card.GameCtrl.score.get() > C.DeadlineScore) {
+            fail = true;
+        }
+        Card.GameCtrl.score.restore();
+        return fail;
+    }
 }
 class CardPlusMinus extends Card {
     constructor(val, decor, scoreVal) {
@@ -536,6 +545,9 @@ class GameCtrl {
         let htmlTick = tmpTick.replace('$tick$', this.tickCnt);
 
         let html = '';
+        html += '<div id=stock style=" width:1000px;height:120px">';
+        html += this.renderCardStock();
+        html += '</div>';
         html += '<div id=tick>';
         html += htmlTick;
         html += '</div>';
@@ -543,9 +555,6 @@ class GameCtrl {
         html += tmpScore.replace('$score$', this.score.get());
         html += '</div>';
         html += '<hr/>';
-        html += '<div id=stock style="position: absolute;top:140px;left:0px;width:1000px;height:120px">';
-        html += this.renderCardStock();
-        html += '</div>';
         html += '<hr/>';
         html += '<div id=played>';
         html += this.renderCardPlayed();
