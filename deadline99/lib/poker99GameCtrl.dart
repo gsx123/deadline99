@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:math';
 import 'dart:ui';
 import 'package:Deadline99/poker99.dart';
@@ -7,7 +8,52 @@ import 'package:flutter/material.dart';
 
 import 'components/card.dart';
 import 'components/player.dart';
+
 // import '../pacman.dart';
+class C {
+  static int HandSize = 5;
+  static int DeadlineScore = 99;
+}
+
+class Logger {
+  warn(msg) {
+    print(msg);
+  }
+
+  info(msg) {
+    print(msg);
+  }
+
+  log(msg) {
+    print(msg);
+  }
+
+  error(msg) {
+    print(msg);
+  }
+}
+
+class Score {
+  var score = 0;
+  var scoreBackup = 0;
+  get() {
+    return this.score;
+  }
+
+  set(s) {
+    this.scoreBackup = this.score;
+    this.score = s;
+  }
+
+  add(plusValue) {
+    this.scoreBackup = this.score;
+    this.score += plusValue;
+  }
+
+  restore() {
+    this.score = this.scoreBackup;
+  }
+}
 
 class Poker99GameCtrl extends Component {
   Sprite sprite = Sprite('poker1.png');
@@ -24,6 +70,18 @@ class Poker99GameCtrl extends Component {
   Rect get rect => _playerRect;
   bool get died => _died;
 
+  int tickCnt = 0;
+  // this.state = State.init;
+  Player targetPlayer = null;
+
+  bool playOrderClockwise = true;
+  int specifiedNextPlayerId = -1;
+  int curPlayerId = 0;
+
+  int rivalNumber = 4;
+
+  Logger console = Logger();
+  Score score = Score();
   Poker99 game;
   Player myPlayer;
   List<Player> players = List();
@@ -97,6 +155,158 @@ class Poker99GameCtrl extends Component {
       this.players.add(new Player(i.toString(), i + 1, posarr[i]));
     }
   }
+
+  onEndARound(winner) {
+    // window.alert('Winer is ' + winner.getName());
+
+    this.reloadARound();
+  }
+
+  reloadARound() {
+    console.warn('==== reloadARound');
+    this.cardRecyle = this.cardPlayed;
+    this.cardPlayed = [];
+    this.myPlayer.setAlive(true);
+    this.resetPlayer(this.myPlayer);
+    this.players.forEach((e) {
+      this.resetPlayer(e);
+    });
+  }
+
+  resetPlayer(player) {
+    this.cardRecyle.addAll(player.handCards);
+    player.handCards = [];
+    player.setAlive(true);
+  }
+
+  _pickCard() {
+    if (this.cardStock.length == 0) {
+      console.info('No card in stock ,reload ');
+      this.cardStock = this.cardRecyle;
+      this.cardRecyle = [];
+    }
+    var n = Random().nextInt(this.cardStock.length);
+    var card = this.cardStock[n];
+
+    return card;
+  }
+
+  setNextPlayer(player) {
+    for (var i = 0; i < this.players.length; ++i) {
+      if (player == this.players[i]) {
+        this.specifiedNextPlayerId = i + 1;
+      }
+    }
+    if (player == this.myPlayer) {
+      this.specifiedNextPlayerId = 0;
+    }
+    console.log('setNextPlayer specify id:${this.specifiedNextPlayerId}');
+  }
+
+  getNextPlayer() {
+    if (this.specifiedNextPlayerId >= 0) {
+      this.curPlayerId = this.specifiedNextPlayerId;
+      this.specifiedNextPlayerId = -1;
+      if (this.curPlayerId == 0) {
+        return this.myPlayer;
+      }
+      return this.players[this.curPlayerId - 1];
+    }
+    do {
+      this.playOrderClockwise ? this.curPlayerId++ : this.curPlayerId--;
+      if (this.curPlayerId > this.players.length) {
+        this.curPlayerId = 0;
+      }
+      if (this.curPlayerId < 0) {
+        this.curPlayerId = this.players.length;
+      }
+      console.log('getNextPlayer id:${this.curPlayerId}');
+      if (this.curPlayerId == 0) {
+        if (!this.myPlayer.isAlive()) {
+          console.error('Me dead');
+          continue;
+        }
+        // this.tick();
+        return this.myPlayer;
+      }
+      var testPlayer = this.players[this.curPlayerId - 1];
+      if (!testPlayer.isAlive()) {
+        console.log('getNextPlayer player:${testPlayer.getName()} dead');
+        continue;
+      }
+      return testPlayer;
+    } while (true);
+  }
+
+  reversePlayOrder() {
+    this.playOrderClockwise = !this.playOrderClockwise;
+  }
+
+  getCardToPlayer(player) {
+    var a = this._pickCard();
+    player.takeIn(a);
+    console
+        .log('getCardToPlayer card:${a.getName()} player:${player.getName()}');
+  }
+
+  recvPlayedCard(card) {
+    this.cardPlayed.add(card);
+  }
+
+  setTargetPlayer(player) {
+    this.targetPlayer = player;
+  }
+
+  getTargetPlayer() {
+    return this.targetPlayer;
+  }
+
+  buildHands() async {
+    console.log('buildHands');
+    // this.state = State.BuildHands;
+    for (var i = 0; i < C.HandSize; i++) {
+      sleep(Duration(seconds: 1));
+      var a = this._pickCard();
+      this.myPlayer.takeIn(a);
+      for (var j = 0; j < this.players.length; j++) {
+        var b = this._pickCard();
+
+        this.players[j].takeIn(b);
+      }
+      // this.tick();
+    }
+  }
+
+  initRound() async {
+    await this.buildHands();
+  }
+
+  isMyPlayer(player) {
+    return player.getName() == this.myPlayer.getName();
+  }
+
+  pickingPlayCard(player) async {
+    var picking = player.pickingCard();
+    // this.tick();
+    // await sleep(2000);
+    player.pickCardOut(picking.id);
+    this.playCard(player, picking.card);
+
+    // this.tick();
+  }
+
+  playCard(player, card) {
+    if (card) {
+      console.warn('[playCard] "${player.getName()}" played ${card.getName()}');
+      this.recvPlayedCard(card);
+      card.execute(player);
+      // this.tick();
+    }
+    // gt.tick();
+  }
+
+  askToSelectPlusOrMinusScore(player, score) async {}
+  askToSelectTargetPlayer(player) async {}
 
   void render(Canvas canvas) {
     myPlayer.render(canvas);

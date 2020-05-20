@@ -3,6 +3,8 @@ import 'dart:ui';
 import 'package:flame/components/component.dart';
 import 'package:flame/sprite.dart';
 import 'package:flutter/material.dart';
+
+import 'card.dart';
 // import '../pacman.dart';
 
 class Player extends Component {
@@ -18,6 +20,7 @@ class Player extends Component {
   String name;
   int id;
   bool alive;
+  List<PCard> handCards = [];
 
   int get points => _points;
   Point get position => _position;
@@ -42,6 +45,51 @@ class Player extends Component {
     _position = null;
     _died = true;
     _points = 0;
+  }
+
+  getName() {
+    return this.name;
+  }
+
+  takeIn(card) {
+    card.picking = false;
+    this.handCards.add(card);
+  }
+
+  moveCardOut(card) {
+    this.handCards.remove(card);
+  }
+
+  playOutByID(id) {
+    var card = this.handCards.firstWhere((c) {
+      return c.id == id;
+    });
+    this.handCards.removeWhere((c) {
+      return c.id == id;
+    });
+    return card;
+  }
+
+  pickingCard() {
+    var n = Random().nextInt(this.handCards.length);
+    var toPickCard = this.handCards[n];
+    toPickCard.picking = true;
+    return {'card': toPickCard, 'id': n};
+  }
+
+  pickCardOut(n) {
+    var card = this.handCards.elementAt(n);
+    card.picking = false;
+    this.handCards.removeAt(n);
+    return card;
+  }
+
+  setAlive(alive) {
+    this.alive = alive;
+  }
+
+  isAlive() {
+    return this.alive;
   }
 
   void render(Canvas canvas) {
