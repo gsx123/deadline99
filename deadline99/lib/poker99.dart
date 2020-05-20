@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'package:Deadline99/poker99GameCtrl.dart';
 import 'package:flame/flame.dart';
 import 'package:flame/game/game.dart';
 import 'package:flame/gestures.dart';
@@ -16,6 +17,7 @@ class Poker99 extends BaseGame
   VoidCallback onStateChanged;
   VoidCallback onPlayerDead;
 
+  Poker99GameCtrl _gameMapController;
   // GameMapController _gameMapController;
 
   // GameMapController get gameMapController => _gameMapController;
@@ -29,7 +31,7 @@ class Poker99 extends BaseGame
 
   void initialize() async {
     resize(await Flame.util.initialDimensions());
-    // _gameMapController = GameMapController(this);
+    _gameMapController = Poker99GameCtrl(this);
   }
 
   @override
@@ -38,7 +40,7 @@ class Poker99 extends BaseGame
       return;
     }
 
-    // if (_gameMapController != null) _gameMapController.render(canvas);
+    if (_gameMapController != null) _gameMapController.render(canvas);
 
     super.render(canvas);
   }
