@@ -1,13 +1,16 @@
 import 'dart:io';
 import 'dart:math';
 import 'dart:ui';
+import 'package:Deadline99/defines.dart';
 import 'package:Deadline99/poker99.dart';
+import 'package:Deadline99/utils/logger.dart';
 import 'package:flame/components/component.dart';
 import 'package:flame/sprite.dart';
 import 'package:flutter/material.dart';
 
 import 'components/card.dart';
 import 'components/player.dart';
+import 'components/score.dart';
 
 // import '../pacman.dart';
 class C {
@@ -15,45 +18,7 @@ class C {
   static int DeadlineScore = 99;
 }
 
-class Logger {
-  warn(msg) {
-    print(msg);
-  }
-
-  info(msg) {
-    print(msg);
-  }
-
-  log(msg) {
-    print(msg);
-  }
-
-  error(msg) {
-    print(msg);
-  }
-}
-
-class Score {
-  var score = 0;
-  var scoreBackup = 0;
-  get() {
-    return this.score;
-  }
-
-  set(s) {
-    this.scoreBackup = this.score;
-    this.score = s;
-  }
-
-  add(plusValue) {
-    this.scoreBackup = this.score;
-    this.score += plusValue;
-  }
-
-  restore() {
-    this.score = this.scoreBackup;
-  }
-}
+enum PState { Normal, SelectingTargetPlayer }
 
 class Poker99GameCtrl extends Component {
   Sprite sprite = Sprite('poker1.png');
@@ -71,8 +36,9 @@ class Poker99GameCtrl extends Component {
   bool get died => _died;
 
   int tickCnt = 0;
-  // this.state = State.init;
+  PState state = PState.Normal;
   Player targetPlayer = null;
+  var callBackSelectedTargetPlayer;
 
   bool playOrderClockwise = true;
   int specifiedNextPlayerId = -1;
@@ -80,8 +46,7 @@ class Poker99GameCtrl extends Component {
 
   int rivalNumber = 4;
 
-  Logger console = Logger();
-  Score score = Score();
+  Score score;
   Poker99 game;
   Player myPlayer;
   List<Player> players = List();
@@ -94,7 +59,12 @@ class Poker99GameCtrl extends Component {
 
     _playerRect = Rect.fromLTWH(20, 20, 100, 150);
 
+    initBoard();
+    initCards();
     initPlayers(3);
+    initRound();
+    PCard.GameCtrl = this;
+    Player.GameCtrl = this;
   }
 
   void die() {
@@ -105,10 +75,10 @@ class Poker99GameCtrl extends Component {
 
   initCards() {
     for (var i = 3; i <= 10; ++i) {
-      this.cardStock.add(createCard(i, 1));
-      this.cardStock.add(createCard(i, 2));
-      this.cardStock.add(createCard(i, 3));
-      this.cardStock.add(createCard(i, 4));
+      this.cardStock.add(createCard(i.toString(), 1));
+      this.cardStock.add(createCard(i.toString(), 2));
+      this.cardStock.add(createCard(i.toString(), 3));
+      this.cardStock.add(createCard(i.toString(), 4));
     }
     var arr = ['A', 'J', 'Q', 'K'];
     for (var item in arr) {
@@ -119,12 +89,18 @@ class Poker99GameCtrl extends Component {
     }
   }
 
+  initBoard() {
+    var center =
+        Offset(this.game.screenSize.width / 2, this.game.screenSize.height / 2);
+    this.score = Score(center);
+  }
+
   initPlayers(rivalNumber) {
-    var marginH = 100.0;
-    var marginV = 100.0;
-    var center = Offset(
-        this.game.screenSize.width / 2, this.game.screenSize.height - marginV);
-    this.myPlayer = new Player('Me', 0, center);
+    var marginH = 60.0;
+    var marginV = 60.0;
+    var center = Offset(this.game.screenSize.width / 2,
+        this.game.screenSize.height - CardHeight - AvatarHeight - 20);
+    this.myPlayer = new Player('Me', 0, center, true);
     var leftCenter = Offset(marginH, this.game.screenSize.height / 2);
     var leftTop = Offset(marginH, marginV);
     var topCenter = Offset(this.game.screenSize.width / 2, marginV);
@@ -152,8 +128,53 @@ class Poker99GameCtrl extends Component {
       default:
     }
     for (var i = 0; i < rivalNumber; ++i) {
-      this.players.add(new Player(i.toString(), i + 1, posarr[i]));
+      this.players.add(new Player((i + 1).toString(), i + 1, posarr[i], false));
     }
+  }
+
+  callJudge(player) async {
+    console.log('onEvent judge');
+
+    var lose = false;
+    if (player.handCards.length == 0) {
+      lose = true;
+    }
+    if (this.score.get() > C.DeadlineScore) {
+      lose = true;
+      this.score.restore();
+    }
+    if (lose) {
+      player.setAlive(false);
+    }
+
+    var aliveCnt = this.myPlayer.isAlive() ? 1 : 0;
+    var alivePlayer = aliveCnt == 1 ? this.myPlayer : null;
+    for (var p in this.players) {
+      aliveCnt += p.isAlive() ? 1 : 0;
+      if (alivePlayer == null) alivePlayer = p.isAlive() ? p : null;
+    }
+    if (aliveCnt == 1) {
+      console.log('GameOver only one alive');
+      new Future.delayed(new Duration(microseconds: 100), () {
+        this.onEndARound(alivePlayer);
+      });
+    } else {
+      new Future.delayed(new Duration(microseconds: 100), () {
+        this.callNextPlayer();
+      });
+    }
+  }
+
+  callNextPlayer() async {
+    console.log('onEvent nextPlayer');
+    var np = this.getNextPlayer();
+    sleep(Duration(seconds: 1));
+    if (this.isMyPlayer(np)) {
+      return;
+    }
+    // var card = np.pickCard();
+    // this.playCard(np, card);
+    await this.pickingPlayCard(np);
   }
 
   onEndARound(winner) {
@@ -171,11 +192,15 @@ class Poker99GameCtrl extends Component {
     this.players.forEach((e) {
       this.resetPlayer(e);
     });
+    this.score.set(0);
+    new Future.delayed(new Duration(microseconds: 500), () {
+      initRound();
+    });
   }
 
-  resetPlayer(player) {
+  resetPlayer(Player player) {
     this.cardRecyle.addAll(player.handCards);
-    player.handCards = [];
+    player.handCards.clear();
     player.setAlive(true);
   }
 
@@ -187,7 +212,7 @@ class Poker99GameCtrl extends Component {
     }
     var n = Random().nextInt(this.cardStock.length);
     var card = this.cardStock[n];
-
+    this.cardStock.removeAt(n);
     return card;
   }
 
@@ -289,14 +314,16 @@ class Poker99GameCtrl extends Component {
     var picking = player.pickingCard();
     // this.tick();
     // await sleep(2000);
-    player.pickCardOut(picking.id);
-    this.playCard(player, picking.card);
+    player.pickCardOut(picking['id']);
+    new Future.delayed(new Duration(microseconds: 1000), () {
+      this.playCard(player, picking['card']);
+    });
 
     // this.tick();
   }
 
-  playCard(player, card) {
-    if (card) {
+  playCard(Player player, PCard card) {
+    if (card != null) {
       console.warn('[playCard] "${player.getName()}" played ${card.getName()}');
       this.recvPlayedCard(card);
       card.execute(player);
@@ -305,10 +332,54 @@ class Poker99GameCtrl extends Component {
     // gt.tick();
   }
 
-  askToSelectPlusOrMinusScore(player, score) async {}
-  askToSelectTargetPlayer(player) async {}
+  askToSelectPlusOrMinusScore(player, score) async {
+    console.log('askToSelectPlusOrMinusScore');
+    if (!this.isMyPlayer(player)) {
+      var toPlus = Random().nextBool();
+      console.log(
+          'askToSelectPlusOrMinusScore[auto]: ' + (toPlus ? 'plus' : 'minus'));
+      return toPlus;
+    }
+    var toPlus = true; //await window.confirm(`plus or minus ${score}`);
+    // console.log('askToSelectPlusOrMinusScore: ' + toPlus ? 'plus' : 'minus');
+    return toPlus;
+  }
+
+  askToSelectTargetPlayer(player, callBack) async {
+    console.log('askToSelectTargetPlayer');
+    this.state = PState.SelectingTargetPlayer;
+    this.callBackSelectedTargetPlayer = callBack;
+    if (!this.isMyPlayer(player)) {
+      var arr = [];
+      for (var item in this.players) {
+        if (item.isAlive() && player.getId() != item.getId()) arr.add(item);
+      }
+      arr.add(this.myPlayer);
+      var id = Random().nextInt(arr.length);
+      this.targetPlayer = arr[id];
+      console.log(
+          'askToSelectTargetPlayer[auto] selected:${this.targetPlayer.getName()}');
+      this.state = PState.Normal;
+      this.callBackSelectedTargetPlayer(this.targetPlayer);
+      return; //this.targetPlayer;
+    }
+
+    console.log('askToSelectTargetPlayer idle waiting');
+    // this.targetPlayer = null;
+    // while (true) {
+    //   sleep(Duration(seconds: 1));
+    //   console.log('askToSelectTargetPlayer waiting');
+    //   if (this.targetPlayer != null) {
+    //     break;
+    //   }
+    // }
+    // console
+    //     .log('askToSelectTargetPlayer selected:${this.targetPlayer.getName()}');
+    // return this.targetPlayer;
+  }
 
   void render(Canvas canvas) {
+    score.render(canvas);
     myPlayer.render(canvas);
 
     if (cardStock.length > 0) {
@@ -343,5 +414,17 @@ class Poker99GameCtrl extends Component {
     //   _coins.removeWhere((coin) => _coinsToRemove.contains(coin));
     //   _coinsToRemove.clear();
     // }
+  }
+
+  void onTapDown(TapDownDetails details) {
+    var pos = details.globalPosition;
+    bool handled = myPlayer.onTapDown(details);
+    if (handled) return;
+    for (var p in this.players) {
+      handled = p.onTapDown(details);
+      if (handled) {
+        break;
+      }
+    }
   }
 }

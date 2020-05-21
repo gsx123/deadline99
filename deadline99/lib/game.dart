@@ -6,7 +6,7 @@ class Game extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'PacMan Game',
+      title: 'Deadline 99 Game',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         primarySwatch: Colors.blue,

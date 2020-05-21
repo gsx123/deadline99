@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'dart:ui';
+import 'package:Deadline99/defines.dart';
 import 'package:flame/components/component.dart';
 import 'package:flame/sprite.dart';
 import 'package:flutter/material.dart';
@@ -7,9 +8,38 @@ import 'package:flutter/material.dart';
 import '../poker99GameCtrl.dart';
 // import '../pacman.dart';
 
+const CW = 77.0;
+const CH = 108.0;
+const CHGap = 12.0;
+const CWGap = 17.0;
+const CMap = {
+  '2': [0.0, 0.0, CW, CH],
+  '3': [CW + CWGap, 0.0, CW, CH],
+  '4': [(CW + CWGap) * 2, 0.0, CW, CH],
+  '5': [(CW + CWGap) * 3, 0.0, CW, CH],
+  '6': [(CW + CWGap) * 4, 0.0, CW, CH],
+  '7': [0.0, CH + CHGap, CW, CH],
+  '8': [CW + CWGap, CH + CHGap, CW, CH],
+  '9': [(CW + CWGap) * 2, CH + CHGap, CW, CH],
+  '10': [(CW + CWGap) * 3, CH + CHGap, CW, CH],
+  'A': [(CW + CWGap) * 4, CH + CHGap, CW, CH],
+  'J': [0.0, (CH + CHGap) * 2, CW, CH],
+  'Q': [CW + CWGap, (CH + CHGap) * 2, CW, CH],
+  'K': [(CW + CWGap) * 2, (CH + CHGap) * 2, CW, CH],
+  'M1': [(CW + CWGap) * 3, (CH + CHGap) * 2, CW, CH],
+  'M2': [(CW + CWGap) * 4, (CH + CHGap) * 2, CW, CH],
+};
+
 class PCard extends Component {
   static Poker99GameCtrl GameCtrl = null;
-  Sprite sprite = Sprite('poker1.png');
+
+  static getSprite(String val, int decor) {
+    var a = CMap[val];
+    return Sprite('poker' + decor.toString() + '.png',
+        x: a[0], y: a[1], width: a[2], height: a[3]);
+  }
+
+  Sprite sprite;
 
   Rect _playerRect;
   // PacMan _game;
@@ -32,9 +62,17 @@ class PCard extends Component {
   String value;
   int decor;
   PCard(this.value, this.decor) {
-    _position = Point(7.0, 10.0); // starting position
+    sprite = PCard.getSprite(this.value, this.decor);
 
-    _playerRect = Rect.fromLTWH(20, 20, 100, 150);
+    // _playerRect = Rect.fromLTWH(20, 20, 77, 108);
+  }
+
+  getName() {
+    return this.value;
+  }
+
+  setRect(Offset ofs, {width: CardWidth, height: CardHeight}) {
+    _playerRect = Rect.fromLTWH(ofs.dx, ofs.dy, width, height);
   }
 
   void die() {
@@ -43,10 +81,12 @@ class PCard extends Component {
     _points = 0;
   }
 
-  execute(player) {}
+  execute(player) {
+    PCard.GameCtrl.callJudge(player);
+  }
 
   void render(Canvas canvas) {
-    sprite.renderRect(canvas, _playerRect.inflate(2));
+    if (_playerRect != null) sprite.renderRect(canvas, _playerRect.inflate(1));
   }
 
   void update(double t) {}
@@ -55,6 +95,7 @@ class PCard extends Component {
 class CardScore extends PCard {
   CardScore(String val, int decor) : super(val, decor) {}
 
+  @override
   execute(player) {
     PCard.GameCtrl.score.add(int.parse(this.value));
     PCard.GameCtrl.getCardToPlayer(player);
@@ -77,6 +118,7 @@ class CardPlusMinus extends PCard {
   CardPlusMinus(String val, int decor, int score) : super(val, decor) {
     this.scoreVal = score;
   }
+  @override
   execute(player) async {
     var toPlus =
         await PCard.GameCtrl.askToSelectPlusOrMinusScore(player, this.scoreVal);
@@ -88,19 +130,23 @@ class CardPlusMinus extends PCard {
 
 class CardSteal extends PCard {
   CardSteal(String val, int decor) : super(val, decor) {}
+  @override
   execute(player) async {
-    var targetPlayer = await PCard.GameCtrl.askToSelectTargetPlayer(player);
-    var a = targetPlayer.pickingCard();
-    // PCard.GameCtrl.tick();
-    // await sleep(1000);
-    player.takeIn(a.card);
-    // PCard.GameCtrl.getCardToPlayer(player);
-    super.execute(player);
+    var targetPlayer =
+        await PCard.GameCtrl.askToSelectTargetPlayer(player, (targetPlayer) {
+      var a = targetPlayer.pickingCard();
+      // PCard.GameCtrl.tick();
+      // await sleep(1000);
+      player.takeIn(a['card']);
+      // PCard.GameCtrl.getCardToPlayer(player);
+      super.execute(player);
+    });
   }
 }
 
 class CardReverse extends PCard {
   CardReverse(String val, int decor) : super(val, decor) {}
+  @override
   execute(player) async {
     PCard.GameCtrl.reversePlayOrder();
     PCard.GameCtrl.getCardToPlayer(player);
@@ -110,18 +156,22 @@ class CardReverse extends PCard {
 
 class CardExchange extends PCard {
   CardExchange(String val, int decor) : super(val, decor) {}
+  @override
   execute(player) async {
-    var targetPlayer = await PCard.GameCtrl.askToSelectTargetPlayer(player);
-    // PCard.GameCtrl.getCardToPlayer(player);
-    var c = targetPlayer.handCards;
-    targetPlayer.handCards = player.handCards;
-    player.handCards = c;
-    super.execute(player);
+    var targetPlayer =
+        await PCard.GameCtrl.askToSelectTargetPlayer(player, (targetPlayer) {
+      // PCard.GameCtrl.getCardToPlayer(player);
+      var c = targetPlayer.handCards;
+      targetPlayer.handCards = player.handCards;
+      player.handCards = c;
+      super.execute(player);
+    });
   }
 }
 
 class CardScoreToTop extends PCard {
   CardScoreToTop(String val, int decor) : super(val, decor) {}
+  @override
   execute(player) async {
     PCard.GameCtrl.score.set(C.DeadlineScore);
     PCard.GameCtrl.getCardToPlayer(player);
@@ -131,11 +181,14 @@ class CardScoreToTop extends PCard {
 
 class CardPickNext extends PCard {
   CardPickNext(String val, int decor) : super(val, decor) {}
+  @override
   execute(player) async {
-    var targetPlayer = await PCard.GameCtrl.askToSelectTargetPlayer(player);
-    PCard.GameCtrl.setNextPlayer(targetPlayer);
-    PCard.GameCtrl.getCardToPlayer(player);
-    super.execute(player);
+    var targetPlayer =
+        await PCard.GameCtrl.askToSelectTargetPlayer(player, (targetPlayer) {
+      PCard.GameCtrl.setNextPlayer(targetPlayer);
+      PCard.GameCtrl.getCardToPlayer(player);
+      super.execute(player);
+    });
   }
 }
 

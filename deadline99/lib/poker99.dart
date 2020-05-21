@@ -58,7 +58,7 @@ class Poker99 extends BaseGame
 
   @override
   void update(double t) {
-    // if (_gameMapController != null) _gameMapController.update(t);
+    if (_gameMapController != null) _gameMapController.update(t);
 
     super.update(t);
   }
@@ -103,5 +103,7 @@ class Poker99 extends BaseGame
   }
 
   @override
-  void onTapDown(TapDownDetails details) {}
+  void onTapDown(TapDownDetails details) {
+    _gameMapController.onTapDown(details);
+  }
 }

@@ -24,12 +24,14 @@ void main() {
   flameUtil.setOrientation(DeviceOrientation.portraitUp);
   Flame.images.loadAll(<String>[
     'poker1.png',
+    'poker2.png',
+    'poker3.png',
+    'poker4.png',
     'avatar/1.png',
     'avatar/2.png',
     'avatar/3.png',
     'avatar/4.png',
     'avatar/5.png',
-    'avatar/6.png'
     // 'ground.png',
     // 'wall/wall_down_close_left.png',
     // 'wall/wall_down_close_right.png',
